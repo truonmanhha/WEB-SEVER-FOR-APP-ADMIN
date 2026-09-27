@@ -2,6 +2,7 @@
   "releaseVersion": 1,
   "ready": false,
   "testflightURL": null,
+  "web": {"available": true, "version": "1.1", "path": "/phone.html", "updates": "network-first", "requiresCable": false},
   "ios": {
     "available": true,
     "version": "1.0",

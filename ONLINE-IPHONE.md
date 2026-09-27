@@ -12,6 +12,8 @@
 
 App web lấy HTML/JS mới từ web mỗi lần mở/tải lại khi online. Không cần ký, dây, Apple ID hay AltStore. Cache offline chỉ chứa tài nguyên app công khai; không cache API, mật khẩu, khóa hoặc nội dung tin. Update không xóa IndexedDB, cấu hình, hàng đợi hoặc database server. Giữ nguyên origin, manifest ID `/phone.html`, tên database và schema để không tách kho dữ liệu khi update.
 
+Ghi hàng đợi và đăng ký kết nối dùng transaction IndexedDB nguyên tử. Hai cửa sổ/app chạy chồng trong lúc cập nhật không được ghi đè tin mới bằng snapshot cũ; chỉ xóa đúng ID tin sau khi server đã chấp nhận bản mã. API chống trùng ID nên retry không tạo tin trùng.
+
 Không xóa dữ liệu Safari/app, không gỡ app để cập nhật. Không hứa kết nối sống vĩnh viễn: mất dữ liệu thiết bị, thu hồi quyền, đổi domain hoặc lỗi hệ điều hành có thể cần ghép lại.
 
 ## Giới hạn iOS
