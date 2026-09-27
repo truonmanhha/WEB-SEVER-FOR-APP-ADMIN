@@ -2,7 +2,7 @@
 
 Đạt trên máy Windows với dữ liệu giả và thư mục test tạm riêng:
 
-- `npm test`: 7 nhóm tests server/crypto, gồm ưu tiên biến Neon SV_MSG_DATABASE_URL/xác minh TLS, restart database PGlite, ACK không mất archive, quyền đọc/ghi, phiên đăng nhập, CSRF, giới hạn đăng nhập, expiry, phân trang, fixture giao thức dùng chung.
+- `npm test`: 8 nhóm tests server/crypto, gồm ưu tiên biến Neon SV_MSG_DATABASE_URL/xác minh TLS, kiểm tra cấu hình/log chẩn đoán không lộ secrets, restart database PGlite, ACK không mất archive, quyền đọc/ghi, phiên đăng nhập, CSRF, giới hạn đăng nhập, expiry, phân trang, fixture giao thức dùng chung.
 - `npm run test:ui`: Edge headless, desktop 1280px/mobile 390px, đăng nhập, OTP copy giả lập (không ghi clipboard máy), escape nội dung XSS, không lưu web storage, khóa 5 phút, đổi kết nối, database restart, pagehide.
 - `npm audit`: không phát hiện lỗ hổng dependency tại thời điểm kiểm tra.
 - Windows `TestBackend.bat`: 206 assertions, kiểm tra dữ liệu tài khoản/vault, migration lossless, backups, cookie/phone/relationships và phục hồi trong vault test riêng.

@@ -1,7 +1,8 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {fixture,request,login,paired,encrypted,viewerCode,adminToken,password} from './helpers.mjs';
 import {wrap} from '../public/crypto.js';
-import {databaseFromEnvironment,verifiedDatabaseURL} from '../lib/config.mjs';
+import {databaseFromEnvironment,verifiedDatabaseURL,startupFailureCode} from '../lib/config.mjs';
+import {createApp} from '../server.mjs';
 test('dedicated Neon prefix takes precedence; remote Postgres always verifies TLS',()=>{
  const dedicated='postgresql://example.neon.tech/app?sslmode=require&channel_binding=require&uselibpqcompat=true';
  assert.equal(databaseFromEnvironment({SV_MSG_DATABASE_URL:dedicated,DATABASE_URL:'previous-value'}),dedicated);
@@ -9,6 +10,14 @@ test('dedicated Neon prefix takes precedence; remote Postgres always verifies TL
  assert.throws(()=>databaseFromEnvironment({}));assert.throws(()=>verifiedDatabaseURL('invalid'));assert.throws(()=>verifiedDatabaseURL('https://example.invalid/'));
  const parsed=new URL(verifiedDatabaseURL(dedicated));assert.equal(parsed.searchParams.get('sslmode'),'verify-full');assert.equal(parsed.searchParams.get('channel_binding'),'require');assert.equal(parsed.searchParams.has('uselibpqcompat'),false);
  assert.equal(new URL(verifiedDatabaseURL('postgresql://127.0.0.1/test')).searchParams.has('sslmode'),false);
+});
+test('startup validates configuration and diagnostics never log exception secrets',()=>{
+ assert.throws(()=>createApp({adminToken:'incorrect'}),/invalid_relay_admin_token/);
+ assert.throws(()=>createApp({adminToken,passwordHash:'incorrect'}),/invalid_web_password_hash/);
+ assert.equal(startupFailureCode(new Error('postgresql://user:private-test-value@example.invalid/db')),'database_or_runtime_unavailable');
+ assert.equal(startupFailureCode(Object.assign(new Error('private-test-value'),{code:'28P01'})),'28P01');
+ assert.equal(startupFailureCode(Object.assign(new Error('private-test-value'),{code:'includes a secret'})),'database_or_runtime_unavailable');
+ assert.equal(startupFailureCode(new Error('invalid_public_origin')),'invalid_public_origin');
 });
 test('password, persistent rate limits, CSRF, sessions and no unauthenticated content',async t=>{
  const f=await fixture();t.after(()=>f.close());

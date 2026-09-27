@@ -3,11 +3,13 @@ import {createHmac} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {productionStore} from './lib/store.mjs';
-import {databaseFromEnvironment} from './lib/config.mjs';
-import {UUID,TOKEN,hash,secret,equal,fail,envelope,verifyPassword,validateWrapped} from './lib/protocol.mjs';
+import {databaseFromEnvironment,startupFailureCode} from './lib/config.mjs';
+import {UUID,TOKEN,PASSWORD_HASH,hash,secret,equal,fail,envelope,verifyPassword,validateWrapped} from './lib/protocol.mjs';
 export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.floor(Date.now()/1000),test=false}){
- if(!TOKEN.test(adminToken??''))throw new Error('SV_RELAY_ADMIN_TOKEN must be a random 32-byte base64url token');
- const originURL=new URL(origin);if(originURL.origin!==origin||(!test&&originURL.protocol!=='https:'&&originURL.hostname!=='localhost'&&originURL.hostname!=='127.0.0.1'))throw new Error('Set a canonical HTTPS SV_PUBLIC_ORIGIN');
+ if(!TOKEN.test(adminToken??''))throw new Error('invalid_relay_admin_token');
+ if(!PASSWORD_HASH.test(passwordHash??''))throw new Error('invalid_web_password_hash');
+ let originURL;try{originURL=new URL(origin);}catch{throw new Error('invalid_public_origin');}
+ if(originURL.origin!==origin||(!test&&originURL.protocol!=='https:'&&originURL.hostname!=='localhost'&&originURL.hostname!=='127.0.0.1'))throw new Error('invalid_public_origin');
  const app=express();app.disable('x-powered-by');
  app.use((req,res,next)=>{res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"});next();});
  app.use(express.json({limit:'48kb',strict:true}));
@@ -61,7 +63,7 @@ export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.flo
  app.use((err,req,res,next)=>{if(res.headersSent)return next(err);const status=err.status??500;res.status(status).json({error:status===500?'server_unavailable':status===413?'payload_too_large':err.type==='entity.parse.failed'?'invalid_json':err.message});});
  return app;
 }
-let liveApp,ready;
+let liveApp,ready,lastFailure;
 async function handler(req,res){
  try{
   if(!liveApp){
@@ -70,7 +72,7 @@ async function handler(req,res){
    ready=store.migrate().catch(async e=>{liveApp=null;await store.pool.end();throw e;});
   }
   await ready;liveApp(req,res);
- }catch{res.statusCode=503;res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'server_not_configured'}));}
+ }catch(error){const reason=startupFailureCode(error);if(lastFailure!==reason){lastFailure=reason;console.error('SecureVault startup:',reason);}res.statusCode=503;res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:'server_not_configured'}));}
 }
 const deploymentApp=express();deploymentApp.disable('x-powered-by');deploymentApp.use(handler);
 export default deploymentApp;
