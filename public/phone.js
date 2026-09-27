@@ -1,0 +1,36 @@
+import {decode,encode} from './crypto.js';
+import jsQR from './vendor/scan.js';
+const incoming=location.hash.slice(1);history.replaceState(null,'','/phone.html');
+const $=id=>document.getElementById(id),enc=new TextEncoder();let db,config,busy=false,stream,scanTimer;
+function status(s){$('phone-status').textContent=s;}
+const open=indexedDB.open('sv-phone-v1',1);open.onupgradeneeded=()=>open.result.createObjectStore('state');
+async function storage(key,value){return new Promise((resolve,reject)=>{const tx=db.transaction('state',value===undefined?'readonly':'readwrite'),store=tx.objectStore('state'),r=value===undefined?store.get(key):store.put(value,key);tx.oncomplete=()=>resolve(r.result);tx.onerror=()=>reject(Error('Không lưu được dữ liệu trên iPhone.'));tx.onabort=tx.onerror;});}
+function parse(value){
+ const url=new URL(value),native=url.protocol==='securevault:'&&url.hostname==='remote';
+ if(!native&&(url.origin!==location.origin||url.pathname!=='/phone.html'))throw Error('QR không thuộc web này.');
+ const p=new URLSearchParams(native?url.search:url.hash.slice(1)),allowed=['endpoint','channel','write_token','enc_key','mac_key','pair_until','name'];
+ for(const k of p.keys())if(!allowed.includes(k)||p.getAll(k).length!==1)throw Error('QR không hợp lệ.');
+ if(p.get('endpoint')!==location.origin||!/^([0-9a-f]{8}-)([0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(p.get('channel')))throw Error('QR không hợp lệ.');
+ for(const k of ['write_token','enc_key','mac_key'])decode(p.get(k),32,32);
+ const until=Number(p.get('pair_until')),now=Math.floor(Date.now()/1000);if(!Number.isSafeInteger(until)||until<=now||until>now+1200)throw Error('QR hết hạn. Tạo QR mới trên PC.');
+ return {channelId:p.get('channel'),writeToken:p.get('write_token'),encryptionKey:p.get('enc_key'),macKey:p.get('mac_key'),name:(p.get('name')||'iPhone').slice(0,80),deviceId:crypto.randomUUID(),claimed:false};
+}
+async function request(path,body){const r=await fetch('/api/v2/channels/'+config.channelId+path,{method:'POST',cache:'no-store',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(20000),headers:{'Content-Type':'application/json','Authorization':'Bearer '+config.writeToken,'X-SV-Device-Id':config.deviceId},body:JSON.stringify(body)}).catch(()=>{throw Error('Chưa kết nối được; kiểm tra mạng. Kết nối và tin chờ vẫn được giữ.');});if(!r.ok)throw Error(r.status===410?'QR đã hết hạn trước lần kết nối đầu.':r.status===401||r.status===409?'Kết nối bị thu hồi hoặc đã dùng cho thiết bị khác.':'Chưa gửi được; kiểm tra mạng.');return r.json();}
+async function claim(){if(!config)return;if(!config.claimed){await request('/claim',{deviceId:config.deviceId});config.claimed=true;await storage('config',config);navigator.storage?.persist?.().catch(()=>{});}status('Đã kết nối: '+config.name+'. Không cần quét lại.');$('send').disabled=false;$('scan').disabled=true;$('scan').textContent='Kết nối đã lưu';}
+async function accept(value){if(config)throw Error('Đã có kết nối. Không thay khóa hoặc xóa tin cũ.');const next=parse(value);await storage('config',next);config=next;stopScan();await claim();}
+async function queueCount(){const q=await storage('outbox')||[];$('queue').textContent=q.length+' tin đang chờ gửi (lưu mã hóa).';}
+async function flush(){if(busy||!config)return;busy=true;try{await claim();let q=await storage('outbox')||[];for(const e of [...q]){if(e.expiresAt<=Math.floor(Date.now()/1000)){status('Có tin quá 7 ngày; giữ bản mã, không gửi tin đã hết hạn.');continue;}await request('/messages',e);q=q.filter(x=>x.id!==e.id);await storage('outbox',q);}await queueCount();}catch(e){status(e.message);}finally{busy=false;}}
+$('send-form').addEventListener('submit',async e=>{e.preventDefault();if(busy||!config)return;busy=true;$('send').disabled=true;try{
+ const text=$('text').value,sender=$('sender').value;if(!text.trim()||text.length>8000||sender.length>120)throw Error('Nội dung không hợp lệ.');
+ const q=await storage('outbox')||[];if(q.length>=200)throw Error('Hàng đợi đủ 200 tin; gửi hết trước khi thêm.');
+ const now=Math.floor(Date.now()/1000),iv=crypto.getRandomValues(new Uint8Array(16)),key=await crypto.subtle.importKey('raw',decode(config.encryptionKey,32,32),'AES-CBC',false,['encrypt']);
+ const item={version:2,id:crypto.randomUUID(),createdAt:now,expiresAt:now+604800,iv:encode(iv),ciphertext:encode(await crypto.subtle.encrypt({name:'AES-CBC',iv},key,enc.encode(JSON.stringify({text,sender,receivedAt:now,deviceId:config.deviceId}))))};
+ const mac=await crypto.subtle.importKey('raw',decode(config.macKey,32,32),{name:'HMAC',hash:'SHA-256'},false,['sign']);item.mac=encode(await crypto.subtle.sign('HMAC',mac,enc.encode(['SV-MSG-2',config.channelId,item.id,item.createdAt,item.expiresAt,item.iv,item.ciphertext].join('\n'))));
+ await storage('outbox',[...q,item]);$('text').value='';$('sender').value='';status('Đã lưu tin mã hóa; đang gửi…');await queueCount();
+ }catch(err){status(err.message);}finally{busy=false;$('send').disabled=!config;}await flush();});
+function stopScan(){clearTimeout(scanTimer);stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;$('camera').hidden=true;$('stop-scan').hidden=true;}
+$('scan').addEventListener('click',async()=>{try{if(config)throw Error('Đã lưu kết nối; không cần quét lại.');stopScan();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});$('camera').srcObject=stream;$('camera').hidden=false;$('stop-scan').hidden=false;await $('camera').play();const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});async function tick(){if(!stream)return;try{const video=$('camera');if(video.videoWidth){canvas.width=Math.min(video.videoWidth,960);canvas.height=Math.round(video.videoHeight*canvas.width/video.videoWidth);ctx.drawImage(video,0,0,canvas.width,canvas.height);const data=ctx.getImageData(0,0,canvas.width,canvas.height),qr=jsQR(data.data,data.width,data.height);if(qr){await accept(qr.data);return;}}}catch(e){status(e.message);stopScan();return;}scanTimer=setTimeout(tick,300);}await tick();}catch(e){status(e.message);stopScan();}});
+$('stop-scan').addEventListener('click',stopScan);$('retry').addEventListener('click',flush);$('update').addEventListener('click',()=>location.reload());window.addEventListener('online',flush);document.addEventListener('visibilitychange',()=>{if(document.hidden){stopScan();$('text').value='';$('sender').value='';}else flush();});window.addEventListener('pagehide',stopScan);
+try{db=await new Promise((resolve,reject)=>{open.onsuccess=()=>resolve(open.result);open.onerror=()=>reject(Error('Safari không cho lưu kết nối. Không dùng chế độ riêng tư.'));});config=await storage('config');if(incoming){if(!config)await accept(location.origin+'/phone.html#'+incoming);else status('Đã giữ kết nối cũ, không ghi đè bằng QR mới.');}if(config)await flush();else status('Chưa kết nối. Quét QR từ web PC một lần.');await queueCount();}catch(e){status(e.message);}
+setInterval(()=>{if(!document.hidden)flush();},15000);
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/phone-sw.js',{scope:'/phone.html',updateViaCache:'none'}).catch(()=>{});

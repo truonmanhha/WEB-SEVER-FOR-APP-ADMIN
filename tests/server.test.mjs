@@ -59,6 +59,26 @@ test('password, persistent rate limits, CSRF, sessions and no unauthenticated co
  assert.equal((await request(f,'/api/web/config',second)).status,401);
  f.advance(3601);assert.equal((await request(f,'/api/web/config',session)).status,401);
 });
+test('web QR creates a password-wrapped reader; one claim remains valid after QR expiry and restart',async t=>{
+ const f=await fixture();t.after(()=>f.close());const legacy=await paired(f),legacyCipher=encrypted(legacy,'Preserve legacy',f.now);await f.store.put(legacy.channelId,legacy.writeToken,legacy.deviceId,legacyCipher,f.now);
+ const session=await login(f),a=await registration(f,'QR iPhone'),b=await registration(f,'QR iPhone B');
+ const body=({body:{password,deviceId,...v}})=>v;
+ assert.equal((await request(f,'/api/web/pair',{method:'POST',body:body(a)})).status,401);
+ assert.equal((await request(f,'/api/web/pair',{...session,csrf:'wrong',method:'POST',body:body(a)})).status,403);
+ const r=await request(f,'/api/web/pair',{...session,method:'POST',body:body(a)});assert.equal(r.status,201);
+ assert.deepEqual((await request(f,'/api/web/pair',{...session,method:'POST',body:body(a)})).body,r.body);
+ assert.equal((await f.store.devices()).length,0);
+ const claim=d=>request(f,'/api/v2/channels/'+d.c.channelId+'/claim',{method:'POST',bearer:d.c.writeToken,body:{deviceId:d.c.deviceId}});
+ assert.equal((await claim(a)).status,200);assert.equal((await f.store.devices()).length,1);
+ assert.deepEqual(await unwrap((await f.store.devices())[0].wrapped,password,f.origin),viewerCode(a.c));
+ await request(f,'/api/web/pair',{...session,method:'POST',body:body(b)});f.advance(901);
+ assert.equal((await claim(b)).status,410);assert.equal((await claim(a)).status,200);
+ assert.equal((await request(f,'/api/v2/channels/'+a.c.channelId+'/claim',{method:'POST',bearer:a.c.writeToken,body:{deviceId:b.c.deviceId}})).status,409);
+ await f.restart();assert.equal((await claim(a)).status,200);await f.store.prune(f.now);
+ assert.equal((await f.store.devices()).length,1);assert.equal((await f.store.list(legacy.channelId,legacy.readToken,f.now,true)).messages.length,1);
+ const e=encrypted(a.c,'Still connected after QR expired',f.now);assert.equal((await request(f,'/api/v2/channels/'+a.c.channelId+'/messages',{method:'POST',bearer:a.c.writeToken,device:a.c.deviceId,body:e})).status,200);
+ assert.equal((await f.store.list(a.c.channelId,a.c.readToken,f.now,true)).messages.length,1);
+});
 test('v2 delivery survives ACK and restart, browser archive encrypted, roles enforced',async t=>{
  const f=await fixture();t.after(()=>f.close());const c=await paired(f),base='/api/v2/channels/'+c.channelId;
  const e=encrypted(c,'Isolated OTP 654321',f.now);

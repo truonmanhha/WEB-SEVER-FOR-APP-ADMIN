@@ -1,0 +1,15 @@
+{
+  "releaseVersion": 1,
+  "ready": false,
+  "testflightURL": null,
+  "ios": {
+    "available": true,
+    "version": "1.0",
+    "build": 1,
+    "downloadPath": "/downloads/SecureVaultSMS-1.0-1.ipa",
+    "sha256": "5021c77231eb68eb7aa1ccb981c04864f2cbfe6196f9faf2d3d24e8ead2f8349",
+    "signed": false,
+    "installMethod": "AltStore",
+    "notes": "Bản native 1.0 kết nối bằng mật khẩu web. Muốn cài online không dây và ghép QR: dùng app web iPhone trên trang tải. IPA cần AltStore ký lại, không cài trực tiếp bằng Safari."
+  }
+}

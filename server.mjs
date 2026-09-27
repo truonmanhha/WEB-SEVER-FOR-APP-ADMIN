@@ -5,16 +5,18 @@ import {resolve} from 'node:path';
 import {productionStore} from './lib/store.mjs';
 import {databaseFromEnvironment,startupFailureCode} from './lib/config.mjs';
 import {UUID,TOKEN,PASSWORD_HASH,hash,secret,equal,fail,bytes,envelope,verifyPassword,validateWrapped} from './lib/protocol.mjs';
+import {readFileSync} from 'node:fs';
+const release=JSON.parse(readFileSync(new URL('./public/release.json',import.meta.url),'utf8'));
 export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.floor(Date.now()/1000),test=false}){
  if(!TOKEN.test(adminToken??''))throw new Error('invalid_relay_admin_token');
  if(!PASSWORD_HASH.test(passwordHash??''))throw new Error('invalid_web_password_hash');
  let originURL;try{originURL=new URL(origin);}catch{throw new Error('invalid_public_origin');}
  if(originURL.origin!==origin||(!test&&originURL.protocol!=='https:'&&originURL.hostname!=='localhost'&&originURL.hostname!=='127.0.0.1'))throw new Error('invalid_public_origin');
  const app=express();app.disable('x-powered-by');
- app.use((req,res,next)=>{res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"});next();});
+ app.use((req,res,next)=>{res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"});next();});
  app.use(express.json({limit:'48kb',strict:true}));
  app.use(express.static(fileURLToPath(new URL('./public',import.meta.url)),{dotfiles:'deny',index:'index.html'}));
- app.get('/download',(req,res)=>res.sendFile(fileURLToPath(new URL('./public/index.html',import.meta.url))));
+ app.get('/download',(req,res)=>res.sendFile(fileURLToPath(new URL('./public/download.html',import.meta.url))));
  const bearer=req=>{const b=req.get('authorization')??'';if(!/^Bearer [A-Za-z0-9_-]{43}$/.test(b))fail(401,'unauthorized');return b.slice(7);};
  const cookie=req=>{const m=/(?:^|;\s*)sv_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.get('cookie')??'');return m?.[1]??'';};
  const csrf=value=>createHmac('sha256',adminToken).update(value).digest('base64url');
@@ -40,6 +42,12 @@ export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.flo
  });
  app.get('/api/native/devices',async(req,res)=>{const token=bearer(req);if(!await store.session(token,now()))fail(401,'login_required');res.json({devices:await store.devices()});});
  app.get('/api/web/devices',async(req,res)=>{await authenticated(req);res.json({devices:await store.devices()});});
+ app.post('/api/web/pair',async(req,res)=>{
+  await webWrite(req);const v=req.body;
+  if(!v||Object.keys(v).sort().join(',')!=='channelId,name,readToken,wrapped,writeToken'||!UUID.test(v.channelId??'')||typeof v.name!=='string'||!v.name.trim()||v.name.length>80||v.readToken===v.writeToken)fail(400,'invalid_device');
+  bytes(v.readToken,32,32);bytes(v.writeToken,32,32);validateWrapped(v.wrapped);
+  await store.prune(now());res.status(201).json(await store.createWebPair({...v,name:v.name.trim()},now()));
+ });
  app.get('/health',async(req,res)=>{await store.pool.query('SELECT 1');res.json({ok:true,protocol:2});});
  app.post('/api/web/login',async(req,res)=>{
   sameOrigin(req);
@@ -77,7 +85,7 @@ export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.flo
   }fail(405,'method_not_allowed');
  });
  app.delete('/api/v2/channels/:id',async(req,res)=>{if(!UUID.test(req.params.id))fail(404,'not_found');res.json(await store.revoke(req.params.id,bearer(req)));});
- app.get('/api/public/release',(req,res)=>res.json({ready:false,testflightURL:null}));
+ app.get('/api/public/release',(req,res)=>res.json({...release,ios:{...release.ios,downloadURL:origin+release.ios.downloadPath},downloadPage:origin+'/download',sourceURL:origin+'/altstore-source.json'}));
  app.use((req,res)=>res.status(404).json({error:'not_found'}));
  app.use((err,req,res,next)=>{if(res.headersSent)return next(err);const status=err.status??500;res.status(status).json({error:status===500?'server_unavailable':status===413?'payload_too_large':err.type==='entity.parse.failed'?'invalid_json':err.message});});
  return app;

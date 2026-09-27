@@ -16,4 +16,8 @@ CREATE TABLE IF NOT EXISTS sv_devices (
  device_id uuid PRIMARY KEY, channel_id uuid NOT NULL UNIQUE REFERENCES sv_channels(id) ON DELETE CASCADE,
  name text NOT NULL, wrapped jsonb NOT NULL, created_at bigint NOT NULL, last_seen bigint NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sv_pairing_viewers (
+ channel_id uuid PRIMARY KEY REFERENCES sv_channels(id) ON DELETE CASCADE,
+ name text NOT NULL, wrapped jsonb NOT NULL
+);
 

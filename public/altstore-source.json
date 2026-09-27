@@ -1,0 +1,13 @@
+{
+ "name":"Secure Vault • Bản cá nhân",
+ "apps":[{
+  "name":"Secure Vault SMS",
+  "bundleIdentifier":"com.truonmanhha.securevaultotp",
+  "developerName":"Truonmanhha",
+  "localizedDescription":"Cầu nối tin nhắn mã hóa. Bản native hỗ trợ Dán và Phím tắt, không tự đọc hộp thư. Cần ký bằng AltStore. Muốn cài online không dây, dùng app web tại /phone.html.",
+  "iconURL":"https://web-sever-for-app-admin.vercel.app/app-icon.png",
+  "versions":[{"version":"1.0","buildVersion":"1","date":"2026-09-27T08:00:00Z","downloadURL":"https://web-sever-for-app-admin.vercel.app/downloads/SecureVaultSMS-1.0-1.ipa","size":249891,"sha256":"5021c77231eb68eb7aa1ccb981c04864f2cbfe6196f9faf2d3d24e8ead2f8349","minOSVersion":"16.0"}],
+  "appPermissions":{"entitlements":[],"privacy":{"NSCameraUsageDescription":"Camera được dùng để quét mã QR ghép đôi do Secure Vault trên máy tính hiển thị.","NSLocalNetworkUsageDescription":"Kết nối trực tiếp với Secure Vault trên máy tính trong cùng mạng để gửi mã OTP."}}
+ }],
+ "news":[]
+}

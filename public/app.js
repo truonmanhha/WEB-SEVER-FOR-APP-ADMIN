@@ -1,9 +1,13 @@
-import {viewer,wrap,unwrap,decryptMessage} from './crypto.js';
+import {viewer,wrap,wrapDevice,encode,unwrap,decryptMessage} from './crypto.js';
+import QRCode from './vendor/qr.js';
+let invitation=null;
+function clearInvitation(){invitation=null;$('pair-result').hidden=true;const c=$('pair-canvas');c.getContext('2d').clearRect(0,0,c.width,c.height);$('pair-status').textContent='';}
 const $=id=>document.getElementById(id);let credential=null,csrf='',password='',items=new Map(),cursor=null,poll=null,lastAction=Date.now(),busy=false,noticeTimer,generation=0;
 let deviceRows=[],deviceKeys=new Map(),selectedDevice=null,legacy=null,lastDeviceLoad=0,selectGeneration=0;
 async function refreshDevices(){
  const epoch=generation,r=await api('/api/web/devices');if(epoch!==generation)return;
  deviceRows=r.devices;lastDeviceLoad=Date.now();renderDevices();
+ if(invitation&&deviceRows.some(d=>d.channelId===invitation.channelId)){clearInvitation();notice('iPhone đã kết nối. Không cần quét lại khi mở app hoặc cập nhật.');}
  if(!selectedDevice&&deviceRows.length)await selectDevice(deviceRows[0].deviceId);
  else if(selectedDevice&&selectedDevice!=='legacy'&&!deviceRows.some(d=>d.deviceId===selectedDevice)){
   credential=null;selectedDevice=null;items.clear();deviceKeys.clear();render();
@@ -35,7 +39,7 @@ async function api(path,body){
 }
 function start(){clearInterval(poll);poll=setInterval(async()=>{if(Date.now()-lastAction>=300000){lock();return;}if(!document.hidden){try{if(Date.now()-lastDeviceLoad>=30000)await refreshDevices();if(credential)await load();}catch(e){notice(e.message);}}},10000);}
 async function lock(revoke=true){
- generation++;selectGeneration++;const oldCsrf=csrf;credential=null;password='';csrf='';items.clear();cursor=null;deviceRows=[];deviceKeys.clear();legacy=null;selectedDevice=null;clearInterval(poll);$('messages').replaceChildren();$('devices').replaceChildren();$('chat-title').textContent='Chọn thiết bị';$('connection').value='';$('password').value='';$('search').value='';$('dashboard').hidden=true;$('login').hidden=false;
+ generation++;selectGeneration++;clearInvitation();const oldCsrf=csrf;credential=null;password='';csrf='';items.clear();cursor=null;deviceRows=[];deviceKeys.clear();legacy=null;selectedDevice=null;clearInterval(poll);$('messages').replaceChildren();$('devices').replaceChildren();$('chat-title').textContent='Chọn thiết bị';$('connection').value='';$('password').value='';$('search').value='';$('dashboard').hidden=true;$('login').hidden=false;
  if(revoke&&oldCsrf){$('login-button').disabled=true;try{await fetch('/api/web/logout',{method:'POST',credentials:'same-origin',signal:AbortSignal.timeout(5000),headers:{'Content-Type':'application/json','X-SV-CSRF':oldCsrf},body:'{}'}).catch(()=>{});}finally{$('login-button').disabled=false;}}
 }
 for(const event of ['pointerdown','keydown'])document.addEventListener(event,()=>{lastAction=Date.now();},{passive:true});
@@ -75,4 +79,22 @@ function render(){
 $('lock').addEventListener('click',()=>lock());$('refresh').addEventListener('click',()=>load().catch(e=>notice(e.message)));$('older').addEventListener('click',()=>load(true).catch(e=>notice(e.message)));$('search').addEventListener('input',render);
 $('reconnect').addEventListener('click',async()=>{await lock();$('replace-connection').checked=true;notice('Đăng nhập lại để thay kết nối. Cấu hình cũ chưa bị xóa.');});
 // Fresh authentication is required on every tab load; no keys or plaintext in web storage.
-window.addEventListener('pagehide',()=>{generation++;selectGeneration++;credential=null;password='';deviceKeys.clear();legacy=null;deviceRows=[];items.clear();clearInterval(poll);$('devices').replaceChildren();$('messages').replaceChildren();});
+window.addEventListener('pagehide',()=>{generation++;selectGeneration++;clearInvitation();credential=null;password='';deviceKeys.clear();legacy=null;deviceRows=[];items.clear();clearInterval(poll);$('devices').replaceChildren();$('messages').replaceChildren();});
+$('pair-form').addEventListener('submit',async e=>{
+ e.preventDefault();if(!password)return;$('create-pair').disabled=true;const epoch=generation;
+ try{
+  if(invitation?.pairUntil&&invitation.pairUntil<=Math.floor(Date.now()/1000))clearInvitation();
+  if(!invitation){
+   const key=()=>encode(crypto.getRandomValues(new Uint8Array(32))),channelId=crypto.randomUUID();
+   const v={version:1,endpoint:location.origin,channelId,readToken:key(),encryptionKey:key(),macKey:key()};
+   const wrapped=await wrapDevice(v,password);if(epoch!==generation)return;
+   invitation={channelId,name:$('pair-name').value.trim()||'iPhone',readToken:v.readToken,writeToken:key(),wrapped,v};
+  }
+  const p=invitation,r=await api('/api/web/pair',{channelId:p.channelId,name:p.name,readToken:p.readToken,writeToken:p.writeToken,wrapped:p.wrapped});if(epoch!==generation)return;
+  p.pairUntil=r.pairUntil;
+  const params=new URLSearchParams({endpoint:location.origin,channel:p.channelId,write_token:p.writeToken,enc_key:p.v.encryptionKey,mac_key:p.v.macKey,pair_until:String(r.pairUntil),name:p.name});
+  await QRCode.toCanvas($('pair-canvas'),location.origin+'/phone.html#'+params,{width:360,margin:4,errorCorrectionLevel:'M'});if(epoch!==generation){clearInvitation();return;}
+  $('pair-result').hidden=false;$('pair-status').textContent='Cài app web vào Màn hình chính trước → mở biểu tượng Secure Vault → Quét QR kết nối. QR hết hạn lúc '+new Date(r.pairUntil*1000).toLocaleTimeString('vi-VN')+'. Sau khi ghép không cần quét lại. Không chụp/gửi QR cho người khác.';
+ }catch(err){notice(err.message);}finally{$('create-pair').disabled=false;}
+});
+$('close-pair').addEventListener('click',clearInvitation);
