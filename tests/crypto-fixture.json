@@ -1,0 +1,7 @@
+{
+ "channelId":"11111111-2222-3333-4444-555555555555",
+ "encryptionKey":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+ "macKey":"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+ "plaintext":"{\"deviceId\":\"12345678-1234-1234-1234-123456789abc\",\"receivedAt\":1800000000,\"sender\":\"Bank\",\"text\":\"Xin chào — 123456\"}",
+ "envelope":{"version":2,"id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","createdAt":1800000000,"expiresAt":1800604800,"iv":"AAECAwQFBgcICQoLDA0ODw","ciphertext":"E7Hi4x6SBsJ5g9VINULZBRM-6ekOTPF3xQgHlW0-xbnAbcQoi9ExJpA31_dqjw-85GHRbSC1OBgKgVx15qGP54_qJFigNZgTb0LdyTeTRQGjNa_JZc1ZR57EKozqTxiZBse0qUb4-BHUzpjUfOudHyb5kEhVKJtCXyHVNh-Qu9E","mac":"hbYbYRQbpaitL9_Ucg5u3e0mvLLgRAZWspeW2M7tRSk"}
+}

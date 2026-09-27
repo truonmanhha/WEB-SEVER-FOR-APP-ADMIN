@@ -1,0 +1,15 @@
+.env*
+node_modules/
+tests/
+test-results/
+README.md
+DEPLOY.md
+VERIFICATION.md
+vault.secure*
+vault.recovery*
+vault.quickunlock
+vault_local_data.json
+message-sync-v2.*
+*.p12
+*.mobileprovision
+

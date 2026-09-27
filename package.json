@@ -1,0 +1,24 @@
+{
+  "name": "secure-vault-web-relay",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env.local server.mjs",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
+    "test": "node --test --test-concurrency=1 tests/server.test.mjs tests/crypto.test.mjs",
+    "test:ui": "node tests/ui.mjs"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@playwright/test": "1.63.0"
+  }
+}
+
