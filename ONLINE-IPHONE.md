@@ -1,5 +1,11 @@
 # iPhone online, không cần dây
 
+## Nếu đã cài app native iOS
+
+Giữ nguyên app; không bắt cài PWA nữa. Web mặc định chọn **App iOS đã cài**, tạo QR `securevault://remote` tương thích parser hiện có. Quét bằng nút trong app một lần. Keychain lưu cấu hình, `pairUntil` chỉ hạn chế QR chưa dùng; không áp lại expiry khi mở cấu hình đã lưu. Nếu app đã kết nối, không quét lại/không hủy ghép. Server/PC/web đồng bộ qua HTTPS, không yêu cầu dây hoặc cùng Wi-Fi.
+
+Update **native** vẫn cần ký/cài đè qua AltStore; server không thể tự cài IPA vào iOS. Trang tải cung cấp IPA đã xác minh và feed AltStore, không giả vờ đây là OTA không chữ ký. PWA bên dưới là lựa chọn thay thế khi cần cài/cập nhật hoàn toàn qua web.
+
 ## Luồng chính
 
 1. Safari trên iPhone mở `https://web-sever-for-app-admin.vercel.app/download` → Mở app iPhone online.

@@ -9,6 +9,10 @@ try{
  browser=await chromium.launch({channel:'msedge',headless:true});const pc=await browser.newContext(),phone=await browser.newContext({viewport:{width:390,height:844}}),p=await pc.newPage(),m=await phone.newPage(),errors=[];
  for(const page of [p,m])page.on('pageerror',e=>errors.push(e.message));
  await p.goto(f.origin);await p.locator('#password').fill(password);await p.locator('#login-button').click();await p.locator('#pair-name').fill('iPhone QR test');
+ assert.equal(await p.locator('#pair-mode').inputValue(),'native');await p.locator('#create-pair').click();await expect(p.locator('#pair-result')).toBeVisible();
+ const nativePNG=PNG.sync.read(await p.locator('#pair-canvas').screenshot()),nativeQR=jsQR(new Uint8ClampedArray(nativePNG.data),nativePNG.width,nativePNG.height),nativeURL=new URL(nativeQR.data);
+ assert.equal(nativeURL.protocol,'securevault:');assert.equal(nativeURL.hostname,'remote');assert.equal(nativeURL.searchParams.get('endpoint'),f.origin);assert.equal(nativeURL.searchParams.get('write_token').length,43);assert.equal(nativeURL.searchParams.has('readToken'),false);assert.equal(nativeURL.searchParams.has('password'),false);
+ await expect(p.locator('#pair-status')).toContainText('Không cần cài thêm app web');await p.locator('#close-pair').click();await p.locator('#pair-mode').selectOption('web');
  const posted=p.waitForRequest(r=>r.url().endsWith('/api/web/pair'));await p.locator('#create-pair').click();await expect(p.locator('#pair-result')).toBeVisible();const request=(await posted).postDataJSON();
  assert.equal('password'in request,false);assert.equal('encryptionKey'in request,false);assert.equal('macKey'in request,false);
  const png=PNG.sync.read(await p.locator('#pair-canvas').screenshot()),qr=jsQR(new Uint8ClampedArray(png.data),png.width,png.height);assert.ok(qr);const url=new URL(qr.data);assert.equal(url.origin,f.origin);assert.equal(url.pathname,'/phone.html');assert.ok(!url.search);assert.ok(!qr.data.includes(request.readToken));

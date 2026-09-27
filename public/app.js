@@ -93,8 +93,9 @@ $('pair-form').addEventListener('submit',async e=>{
   const p=invitation,r=await api('/api/web/pair',{channelId:p.channelId,name:p.name,readToken:p.readToken,writeToken:p.writeToken,wrapped:p.wrapped});if(epoch!==generation)return;
   p.pairUntil=r.pairUntil;
   const params=new URLSearchParams({endpoint:location.origin,channel:p.channelId,write_token:p.writeToken,enc_key:p.v.encryptionKey,mac_key:p.v.macKey,pair_until:String(r.pairUntil),name:p.name});
-  await QRCode.toCanvas($('pair-canvas'),location.origin+'/phone.html#'+params,{width:360,margin:4,errorCorrectionLevel:'M'});if(epoch!==generation){clearInvitation();return;}
-  $('pair-result').hidden=false;$('pair-status').textContent='Cài app web vào Màn hình chính trước → mở biểu tượng Secure Vault → Quét QR kết nối. QR hết hạn lúc '+new Date(r.pairUntil*1000).toLocaleTimeString('vi-VN')+'. Sau khi ghép không cần quét lại. Không chụp/gửi QR cho người khác.';
+  const native=$('pair-mode').value==='native',qr=native?'securevault://remote?'+params.toString().replace(/\+/g,'%20'):location.origin+'/phone.html#'+params;
+  await QRCode.toCanvas($('pair-canvas'),qr,{width:360,margin:4,errorCorrectionLevel:'M'});if(epoch!==generation){clearInvitation();return;}
+  $('pair-result').hidden=false;$('pair-status').textContent=(native?'App iOS đã cài → Quét QR ghép đôi. Không cần cài thêm app web. Nếu đã kết nối thì giữ nguyên, không quét lại. ':'Cài app web vào Màn hình chính trước → mở Secure Vault → Quét QR kết nối. ')+'QR tạo kết nối hết hạn lúc '+new Date(r.pairUntil*1000).toLocaleTimeString('vi-VN')+'. Sau khi ghép không cần quét lại. Không chụp/gửi QR cho người khác.';
  }catch(err){notice(err.message);}finally{$('create-pair').disabled=false;}
 });
 $('close-pair').addEventListener('click',clearInvitation);

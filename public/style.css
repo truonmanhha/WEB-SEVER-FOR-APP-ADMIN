@@ -4,3 +4,4 @@
 .device-panel{min-width:0}.device-panel nav{max-width:100%}
 .pairing-panel{margin-bottom:24px}.pairing-panel form{max-width:460px}#pair-canvas{display:block;max-width:100%;height:auto;margin:20px auto}#pair-status{font-size:13px;overflow-wrap:anywhere}.download-link{display:inline-block;text-decoration:none;padding:12px 18px;border-radius:11px}#checksum{overflow-wrap:anywhere}#source{margin-bottom:12px}
 #camera{width:100%;max-height:300px}
+select{font:inherit;width:100%;border:1px solid #dfe6f4;border-radius:11px;padding:13px 15px;background:#f0f4fc;color:#172544}
