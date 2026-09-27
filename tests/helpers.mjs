@@ -6,6 +6,7 @@ import {createServer} from 'node:http';
 import {scryptSync,randomBytes,randomUUID,createCipheriv,createHmac} from 'node:crypto';
 import {RelayStore} from '../lib/store.mjs';
 import {createApp} from '../server.mjs';
+import {wrapDevice} from '../public/crypto.js';
 export const password='isolated-test-password',adminToken=randomBytes(32).toString('base64url');
 const salt=randomBytes(16).toString('hex');
 export const passwordHash='scrypt$32768$'+salt+'$'+scryptSync(password,salt,64,{N:32768,r:8,p:1,maxmem:67108864}).toString('hex');
@@ -32,6 +33,11 @@ export async function request(f,path,{method='GET',body,bearer,cookie,csrf,devic
 export async function login(f){const r=await request(f,'/api/web/login',{method:'POST',body:{password}});if(r.status!==200)throw Error('Test login failed');return {cookie:r.cookie,csrf:r.body.csrf};}
 export async function paired(f){const r=await request(f,'/api/v2/channels',{method:'POST',body:{},bearer:adminToken});const ch=r.body,deviceId=randomUUID();if(r.status!==201)throw Error('Channel create failed');await request(f,'/api/v2/channels/'+ch.channelId+'/claim',{method:'POST',body:{deviceId},bearer:ch.writeToken});return {...ch,deviceId,version:1,endpoint:f.origin,encryptionKey:randomBytes(32).toString('base64url'),macKey:randomBytes(32).toString('base64url')};}
 export function viewerCode(c){return {version:1,endpoint:c.endpoint,channelId:c.channelId,readToken:c.readToken,encryptionKey:c.encryptionKey,macKey:c.macKey};}
+export async function registration(f,name='iPhone thử nghiệm'){
+ const c={version:1,endpoint:f.origin,deviceId:randomUUID(),channelId:randomUUID(),readToken:randomBytes(32).toString('base64url'),writeToken:randomBytes(32).toString('base64url'),encryptionKey:randomBytes(32).toString('base64url'),macKey:randomBytes(32).toString('base64url')};
+ const wrapped=await wrapDevice(viewerCode(c),password);
+ return {c,body:{password,deviceId:c.deviceId,channelId:c.channelId,name,readToken:c.readToken,writeToken:c.writeToken,wrapped}};
+}
 export function encrypted(c,text='Your code is 123456',now=Math.floor(Date.now()/1000)){
  const iv=randomBytes(16),cipher=createCipheriv('aes-256-cbc',Buffer.from(c.encryptionKey,'base64url'),iv);
  const content={text,sender:'TEST sender',receivedAt:now,deviceId:c.deviceId};

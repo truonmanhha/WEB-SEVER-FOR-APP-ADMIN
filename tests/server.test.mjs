@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {fixture,request,login,paired,encrypted,viewerCode,adminToken,password} from './helpers.mjs';
-import {wrap} from '../public/crypto.js';
+import {fixture,request,login,paired,encrypted,viewerCode,adminToken,password,registration} from './helpers.mjs';
+import {wrap,unwrap} from '../public/crypto.js';
 import {databaseFromEnvironment,verifiedDatabaseURL,startupFailureCode} from '../lib/config.mjs';
 import {createApp} from '../server.mjs';
 test('dedicated Neon prefix takes precedence; remote Postgres always verifies TLS',()=>{
@@ -18,6 +18,28 @@ test('startup validates configuration and diagnostics never log exception secret
  assert.equal(startupFailureCode(Object.assign(new Error('private-test-value'),{code:'28P01'})),'28P01');
  assert.equal(startupFailureCode(Object.assign(new Error('private-test-value'),{code:'includes a secret'})),'database_or_runtime_unavailable');
  assert.equal(startupFailureCode(new Error('invalid_public_origin')),'invalid_public_origin');
+});
+test('password registration discovers separate encrypted device chats; retries and migration preserve existing data',async t=>{
+ const f=await fixture();t.after(()=>f.close());const legacy=await paired(f),session=await login(f);
+ const legacyWrapped=await wrap(viewerCode(legacy),password);await f.store.saveConfig(legacyWrapped);
+ const a=await registration(f,'iPhone A <img onerror=alert(1)>'),b=await registration(f,'iPhone B');
+ assert.equal((await request(f,'/api/web/devices')).status,401);
+ assert.equal((await request(f,'/api/native/devices',{bearer:adminToken})).status,401);
+ assert.equal((await request(f,'/api/native/register',{method:'POST',body:{...a.body,password:'wrong'},origin:undefined})).status,401);
+ assert.equal((await request(f,'/api/native/register',{method:'POST',body:a.body,origin:'https://evil.invalid'})).status,403);
+ for(const d of [a,b])assert.equal((await request(f,'/api/native/register',{method:'POST',body:d.body,origin:null})).status,201);
+ assert.equal((await request(f,'/api/native/register',{method:'POST',body:a.body,origin:null})).status,201);
+ assert.equal((await request(f,'/api/native/register',{method:'POST',body:{...a.body,channelId:b.c.channelId},origin:null})).status,409);
+ assert.equal((await f.store.pool.query('SELECT count(*)::int AS n FROM sv_channels')).rows[0].n,3);
+ for(const [d,text]of [[a,'A only 123456'],[b,'B only 654321']])await f.store.put(d.c.channelId,d.c.writeToken,d.c.deviceId,encrypted(d.c,text,f.now),f.now);
+ const devices=(await request(f,'/api/web/devices',session)).body.devices;assert.equal(devices.length,2);
+ for(const d of devices){const v=await unwrap(d.wrapped,password,f.origin);assert.equal(v.channelId,d.channelId);assert.equal('writeToken'in v,false);assert.ok(!JSON.stringify(d).includes(v.readToken));await assert.rejects(()=>unwrap(d.wrapped,'wrong',f.origin));}
+ const result=await request(f,'/api/native/login',{method:'POST',body:{password},origin:null});assert.equal(result.status,200);
+ assert.equal((await request(f,'/api/native/devices',{bearer:result.body.token})).body.devices.length,2);
+ await f.restart();assert.deepEqual(await f.store.config(),legacyWrapped);assert.equal((await f.store.devices()).length,2);
+ const archive=await request(f,'/api/web/messages',{...session,method:'POST',body:{channelId:a.c.channelId,readToken:b.c.readToken}});assert.equal(archive.status,401);
+ assert.equal((await f.store.list(a.c.channelId,a.c.readToken,f.now,true)).messages.length,1);
+ f.advance(3601);assert.equal((await request(f,'/api/native/devices',{bearer:result.body.token})).status,401);
 });
 test('password, persistent rate limits, CSRF, sessions and no unauthenticated content',async t=>{
  const f=await fixture();t.after(()=>f.close());

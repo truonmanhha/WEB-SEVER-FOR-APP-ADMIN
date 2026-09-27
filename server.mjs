@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {productionStore} from './lib/store.mjs';
 import {databaseFromEnvironment,startupFailureCode} from './lib/config.mjs';
-import {UUID,TOKEN,PASSWORD_HASH,hash,secret,equal,fail,envelope,verifyPassword,validateWrapped} from './lib/protocol.mjs';
+import {UUID,TOKEN,PASSWORD_HASH,hash,secret,equal,fail,bytes,envelope,verifyPassword,validateWrapped} from './lib/protocol.mjs';
 export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.floor(Date.now()/1000),test=false}){
  if(!TOKEN.test(adminToken??''))throw new Error('invalid_relay_admin_token');
  if(!PASSWORD_HASH.test(passwordHash??''))throw new Error('invalid_web_password_hash');
@@ -21,6 +21,25 @@ export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.flo
  const sameOrigin=req=>{if(req.get('origin')!==origin)fail(403,'wrong_origin');};
  const authenticated=async req=>{const t=cookie(req);if(!TOKEN.test(t)||!await store.session(t,now()))fail(401,'login_required');return t;};
  const webWrite=async req=>{sameOrigin(req);const t=await authenticated(req);if(!equal(req.get('x-sv-csrf')??'',csrf(t)))fail(403,'csrf_required');return t;};
+ const passwordAuth=async req=>{
+  const ip=process.env.VERCEL?req.get('x-vercel-forwarded-for')??req.socket.remoteAddress:req.socket.remoteAddress;
+  await store.attempt(hash(adminToken+'|'+ip),now());
+  if(!await verifyPassword(req.body?.password,passwordHash))fail(401,'wrong_password');
+ };
+ app.post('/api/native/register',async(req,res)=>{
+  // Native clients have no Origin. Browser-origin requests must still match.
+  if(req.get('origin'))sameOrigin(req);
+  await passwordAuth(req);const v=req.body;
+  if(!v||Object.keys(v).sort().join(',')!=='channelId,deviceId,name,password,readToken,wrapped,writeToken'||!UUID.test(v.deviceId??'')||!UUID.test(v.channelId??'')||typeof v.name!=='string'||!v.name.trim()||v.name.length>80)fail(400,'invalid_device');
+  if(!TOKEN.test(v.readToken??'')||!TOKEN.test(v.writeToken??'')||v.readToken===v.writeToken)fail(400,'invalid_device');
+  bytes(v.readToken,32,32);bytes(v.writeToken,32,32);
+  validateWrapped(v.wrapped);await store.prune(now());res.status(201).json(await store.registerDevice({...v,name:v.name.trim()},now()));
+ });
+ app.post('/api/native/login',async(req,res)=>{
+  if(req.get('origin'))sameOrigin(req);await passwordAuth(req);const token=secret();await store.login(token,now());res.json({token,expiresIn:3600});
+ });
+ app.get('/api/native/devices',async(req,res)=>{const token=bearer(req);if(!await store.session(token,now()))fail(401,'login_required');res.json({devices:await store.devices()});});
+ app.get('/api/web/devices',async(req,res)=>{await authenticated(req);res.json({devices:await store.devices()});});
  app.get('/health',async(req,res)=>{await store.pool.query('SELECT 1');res.json({ok:true,protocol:2});});
  app.post('/api/web/login',async(req,res)=>{
   sameOrigin(req);

@@ -12,4 +12,8 @@ CREATE INDEX IF NOT EXISTS sv_messages_expiry ON sv_messages(expires_at);
 CREATE TABLE IF NOT EXISTS sv_sessions (token_hash text PRIMARY KEY, expires_at bigint NOT NULL);
 CREATE TABLE IF NOT EXISTS sv_login_limits (key text PRIMARY KEY, attempts integer NOT NULL, reset_at bigint NOT NULL);
 CREATE TABLE IF NOT EXISTS sv_web_config (id integer PRIMARY KEY CHECK(id=1), wrapped jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS sv_devices (
+ device_id uuid PRIMARY KEY, channel_id uuid NOT NULL UNIQUE REFERENCES sv_channels(id) ON DELETE CASCADE,
+ name text NOT NULL, wrapped jsonb NOT NULL, created_at bigint NOT NULL, last_seen bigint NOT NULL
+);
 

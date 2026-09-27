@@ -22,9 +22,32 @@ export async function wrap(value,password){
  return {version:1,iterations:310000,salt:encode(salt),iv:encode(iv),ciphertext:encode(ciphertext)};
 }
 export async function unwrap(value,password,origin){
+ if(value?.version===2){
+  if(value.iterations!==310000)throw Error('Cấu hình không hợp lệ');
+  const salt=decode(value.salt,16,16),iv=decode(value.iv,16,16),cipher=decode(value.ciphertext,32,4096);
+  const base=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);
+  const keys=new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt,iterations:310000},base,512));
+  try{
+   const key=await crypto.subtle.importKey('raw',keys.slice(32),{name:'HMAC',hash:'SHA-256'},false,['verify']);
+   if(!await crypto.subtle.verify('HMAC',key,decode(value.mac,32,32),enc.encode(['SV-DEVICE-KEYS-1',value.salt,value.iv,value.ciphertext].join('\n'))))throw Error('Không mở được khóa thiết bị');
+   const aes=await crypto.subtle.importKey('raw',keys.slice(0,32),'AES-CBC',false,['decrypt']);
+   return viewer(JSON.parse(dec.decode(await crypto.subtle.decrypt({name:'AES-CBC',iv},aes,cipher))),origin);
+  }finally{keys.fill(0);}
+ }
  if(value?.version!==1||value.iterations!==310000)throw Error('Cấu hình không hợp lệ');
  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:decode(value.iv,12,12)},await wrapKey(password,decode(value.salt,16,16),'decrypt'),decode(value.ciphertext,32,4096));
  return viewer(JSON.parse(dec.decode(plain)),origin);
+}
+export async function wrapDevice(value,password){
+ const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(16));
+ const base=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveBits']);
+ const keys=new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt,iterations:310000},base,512));
+ try{
+  const aes=await crypto.subtle.importKey('raw',keys.slice(0,32),'AES-CBC',false,['encrypt']);
+  const v={version:2,iterations:310000,salt:encode(salt),iv:encode(iv),ciphertext:encode(await crypto.subtle.encrypt({name:'AES-CBC',iv},aes,enc.encode(JSON.stringify(value))))};
+  const key=await crypto.subtle.importKey('raw',keys.slice(32),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  v.mac=encode(await crypto.subtle.sign('HMAC',key,enc.encode(['SV-DEVICE-KEYS-1',v.salt,v.iv,v.ciphertext].join('\n'))));return v;
+ }finally{keys.fill(0);}
 }
 export async function decryptMessage(e,v,deviceId,now=Math.floor(Date.now()/1000)){
  if(e?.version!==2||!uuid.test(e.id)||!Number.isSafeInteger(e.createdAt)||!Number.isSafeInteger(e.expiresAt)||e.createdAt>now+300||e.createdAt<now-604800||e.expiresAt!==e.createdAt+604800||e.expiresAt<=now)throw Error('Tin đã hết hạn hoặc không hợp lệ');

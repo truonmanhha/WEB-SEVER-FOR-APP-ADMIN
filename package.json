@@ -10,7 +10,7 @@
     "start": "node --env-file-if-exists=.env.local server.mjs",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
     "test": "node --test --test-concurrency=1 tests/server.test.mjs tests/crypto.test.mjs",
-    "test:ui": "node tests/ui.mjs"
+    "test:ui": "node tests/ui.mjs && node tests/devices-ui.mjs"
   },
   "dependencies": {
     "express": "5.2.1",
