@@ -3,6 +3,7 @@ import {createHmac} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {productionStore} from './lib/store.mjs';
+import {databaseFromEnvironment} from './lib/config.mjs';
 import {UUID,TOKEN,hash,secret,equal,fail,envelope,verifyPassword,validateWrapped} from './lib/protocol.mjs';
 export function createApp({store,origin,passwordHash,adminToken,now=()=>Math.floor(Date.now()/1000),test=false}){
  if(!TOKEN.test(adminToken??''))throw new Error('SV_RELAY_ADMIN_TOKEN must be a random 32-byte base64url token');
@@ -64,7 +65,7 @@ let liveApp,ready;
 async function handler(req,res){
  try{
   if(!liveApp){
-   const store=productionStore(process.env.DATABASE_URL);
+   const store=productionStore(databaseFromEnvironment(process.env));
    liveApp=createApp({store,origin:process.env.SV_PUBLIC_ORIGIN,passwordHash:process.env.SV_WEB_PASSWORD_HASH,adminToken:process.env.SV_RELAY_ADMIN_TOKEN});
    ready=store.migrate().catch(async e=>{liveApp=null;await store.pool.end();throw e;});
   }

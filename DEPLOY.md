@@ -12,6 +12,8 @@ Trong project Vercel → Storage → Marketplace, nối Neon/PostgreSQL (hoặc 
 
 Lấy connection string **pooled** được provider cấp. TLS phải xác minh chứng chỉ; ưu tiên `sslmode=verify-full` với CA hợp lệ. Không đặt `rejectUnauthorized:false`. DATABASE_URL có user/password database là bí mật.
 
+Nếu `DATABASE_URL` đã tồn tại khi nối Neon, nhập Custom Prefix `SV_MSG`. Neon sẽ tự tạo biến **SV_MSG_DATABASE_URL** ở Production. Server ưu tiên biến này, không cần copy link bí mật hoặc xóa/ghi đè DATABASE_URL cũ. Cả runtime và lệnh db:migrate dùng cùng thứ tự ưu tiên. Kết nối PostgreSQL từ xa luôn bật xác minh chứng chỉ và hostname TLS.
+
 ## 3. Vercel settings
 
 - Runtime Node.js 24.x. Project dùng Express zero-config (`server.mjs` default export Express). Giữ root directory ở thư mục web, không đặt Output Directory thành `public` hoặc deploy dạng static-only.
@@ -19,7 +21,7 @@ Lấy connection string **pooled** được provider cấp. TLS phải xác minh
 
 | Biến | Giá trị |
 | --- | --- |
-| DATABASE_URL | Connection string PostgreSQL production |
+| SV_MSG_DATABASE_URL hoặc DATABASE_URL | Link PostgreSQL production; Neon tự tạo SV_MSG_DATABASE_URL với prefix SV_MSG, server ưu tiên biến này |
 | SV_PUBLIC_ORIGIN | URL production HTTPS, ví dụ `https://ten-project.vercel.app`, không dấu `/` cuối, không đường dẫn/query |
 | SV_WEB_PASSWORD_HASH | Giá trị hash từ `.env.local` riêng |
 | SV_RELAY_ADMIN_TOKEN | Giá trị token ngẫu nhiên từ `.env.local` riêng |

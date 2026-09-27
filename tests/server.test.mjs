@@ -1,6 +1,15 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {fixture,request,login,paired,encrypted,viewerCode,adminToken,password} from './helpers.mjs';
 import {wrap} from '../public/crypto.js';
+import {databaseFromEnvironment,verifiedDatabaseURL} from '../lib/config.mjs';
+test('dedicated Neon prefix takes precedence; remote Postgres always verifies TLS',()=>{
+ const dedicated='postgresql://example.neon.tech/app?sslmode=require&channel_binding=require&uselibpqcompat=true';
+ assert.equal(databaseFromEnvironment({SV_MSG_DATABASE_URL:dedicated,DATABASE_URL:'previous-value'}),dedicated);
+ assert.equal(databaseFromEnvironment({SV_MSG_DATABASE_URL:' ',DATABASE_URL:dedicated}),dedicated);
+ assert.throws(()=>databaseFromEnvironment({}));assert.throws(()=>verifiedDatabaseURL('invalid'));assert.throws(()=>verifiedDatabaseURL('https://example.invalid/'));
+ const parsed=new URL(verifiedDatabaseURL(dedicated));assert.equal(parsed.searchParams.get('sslmode'),'verify-full');assert.equal(parsed.searchParams.get('channel_binding'),'require');assert.equal(parsed.searchParams.has('uselibpqcompat'),false);
+ assert.equal(new URL(verifiedDatabaseURL('postgresql://127.0.0.1/test')).searchParams.has('sslmode'),false);
+});
 test('password, persistent rate limits, CSRF, sessions and no unauthenticated content',async t=>{
  const f=await fixture();t.after(()=>f.close());
  assert.equal((await request(f,'/api/web/config')).status,401);
